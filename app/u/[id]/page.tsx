@@ -1,28 +1,40 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Star } from 'lucide-react';
 
-// Initialize Supabase ONCE outside the component
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+export default function ReviewFunnel({ params }: { params: Promise<{ id: string }> }) {
+  // 1. Unwrap params (Required for Next.js 15)
+  const resolvedParams = use(params);
+  const businessId = resolvedParams.id;
 
-export default function ReviewFunnel({ params }: { params: { id: string } }) {
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [businessName, setBusinessName] = useState('Loading...');
   const [googleLink, setGoogleLink] = useState('');
 
+  // 2. Safely initialize Supabase
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // We only create the client if the variables actually exist
+  const supabase = (supabaseUrl && supabaseKey) 
+    ? createClient(supabaseUrl, supabaseKey) 
+    : null;
+
   useEffect(() => {
+    if (!supabase) {
+      console.error("Environment variables are missing! Check Vercel settings.");
+      return;
+    }
+
     const fetchBusiness = async () => {
       const { data } = await supabase
         .from('profiles')
         .select('*')
-        .eq('username', params.id)
+        .eq('username', businessId)
         .single();
 
       if (data) {
@@ -31,35 +43,37 @@ export default function ReviewFunnel({ params }: { params: { id: string } }) {
       }
     };
     fetchBusiness();
-  }, [params.id]);
+  }, [businessId, supabase]);
 
-  // NEW: Integrated handler that saves AND redirects
   const processReview = async (selectedRating: number) => {
     setRating(selectedRating);
 
-    // If 5 stars, save it automatically and then redirect
+    if (!supabase) {
+      alert("System configuration error. Please try again later.");
+      return;
+    }
+
     if (selectedRating === 5) {
-      const { error } = await supabase.from('feedback').insert([
+      // Save 5-star review to DB first
+      await supabase.from('feedback').insert([
         {
-          business_username: params.id,
+          business_username: businessId,
           rating: 5,
-          message: 'Redirected to Google',
+          message: '5-star auto-redirect',
         },
       ]);
-
-      if (error) {
-        console.error("Database Error:", error.message);
-      }
       
-      // Delay slightly so the database has a millisecond to breathe
-      window.location.href = googleLink || 'https://share.google/nanUjX8N28JnoKvVo';
+      // Then redirect
+      window.location.href = googleLink || 'https://google.com';
     }
   };
 
   const handleSubmitFeedback = async () => {
+    if (!supabase) return;
+
     const { error } = await supabase.from('feedback').insert([
       {
-        business_username: params.id,
+        business_username: businessId,
         rating: rating,
         message: feedback,
       },
@@ -76,21 +90,29 @@ export default function ReviewFunnel({ params }: { params: { id: string } }) {
   if (submitted) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
-        <h1 className="text-2xl px-4 text-center">Thank you for your feedback! We will improve.</h1>
+        <h1 className="text-2xl px-4 text-center">Thank you! Your feedback helps us improve.</h1>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
+      {/* If Supabase is missing, show a warning to you (the developer) */}
+      {!supabase && (
+        <div className="bg-red-600 text-white p-2 mb-4 rounded text-xs">
+          Developer Error: NEXT_PUBLIC_SUPABASE_URL is missing.
+        </div>
+      )}
+
       <h1 className="text-3xl font-bold mb-8 text-center">Rate {businessName}</h1>
 
       <div className="flex gap-2 mb-8">
         {[1, 2, 3, 4, 5].map((star) => (
           <button
             key={star}
+            type="button"
             onClick={() => processReview(star)}
-            className="transform hover:scale-110 transition-transform"
+            className="transform hover:scale-110 transition-transform active:scale-95"
           >
             <Star
               size={48}
@@ -102,20 +124,19 @@ export default function ReviewFunnel({ params }: { params: { id: string } }) {
       </div>
 
       {rating > 0 && rating < 5 && (
-        <div className="w-full max-w-md animate-fade-in">
-          <p className="mb-4 text-center text-gray-400">What can we do better?</p>
+        <div className="w-full max-w-md">
           <textarea
-            className="w-full p-4 rounded bg-gray-800 text-white border border-gray-700 focus:outline-none focus:border-white"
+            className="w-full p-4 rounded bg-gray-800 text-white border border-gray-700"
             rows={4}
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Tell us about your experience..."
+            placeholder="How can we improve?"
           />
           <button
             onClick={handleSubmitFeedback}
             className="mt-4 w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200"
           >
-            Send Private Feedback
+            Submit Feedback
           </button>
         </div>
       )}
