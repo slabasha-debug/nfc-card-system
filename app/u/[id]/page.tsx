@@ -5,7 +5,6 @@ import { createClient } from '@supabase/supabase-js';
 import { Star } from 'lucide-react';
 
 export default function ReviewFunnel({ params }: { params: Promise<{ id: string }> }) {
-  // 1. Unwrap params (Required for Next.js 15)
   const resolvedParams = use(params);
   const businessId = resolvedParams.id;
 
@@ -15,31 +14,31 @@ export default function ReviewFunnel({ params }: { params: Promise<{ id: string 
   const [businessName, setBusinessName] = useState('Loading...');
   const [googleLink, setGoogleLink] = useState('');
 
-  // 2. Safely initialize Supabase
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // 1. Get the strings from the environment
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
-  // We only create the client if the variables actually exist
-  const supabase = (supabaseUrl && supabaseKey) 
-    ? createClient(supabaseUrl, supabaseKey) 
-    : null;
+  // 2. ONLY initialize if the URL is valid. This prevents the "Uncaught Error"
+  const isConfigured = supabaseUrl.startsWith('http');
+  const supabase = isConfigured ? createClient(supabaseUrl, supabaseKey) : null;
 
   useEffect(() => {
-    if (!supabase) {
-      console.error("Environment variables are missing! Check Vercel settings.");
-      return;
-    }
+    if (!supabase) return;
 
     const fetchBusiness = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', businessId)
-        .single();
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('username', businessId)
+          .single();
 
-      if (data) {
-        setBusinessName(data.full_name || 'Our Business');
-        setGoogleLink(data.website || 'https://google.com');
+        if (data) {
+          setBusinessName(data.full_name || 'Our Business');
+          setGoogleLink(data.website || 'https://google.com');
+        }
+      } catch (e) {
+        console.error("Database connection failed", e);
       }
     };
     fetchBusiness();
@@ -47,60 +46,45 @@ export default function ReviewFunnel({ params }: { params: Promise<{ id: string 
 
   const processReview = async (selectedRating: number) => {
     setRating(selectedRating);
-
-    if (!supabase) {
-      alert("System configuration error. Please try again later.");
-      return;
-    }
+    if (!supabase) return;
 
     if (selectedRating === 5) {
-      // Save 5-star review to DB first
+      // Save 5-star review
       await supabase.from('feedback').insert([
-        {
-          business_username: businessId,
-          rating: 5,
-          message: '5-star auto-redirect',
-        },
+        { business_username: businessId, rating: 5, message: '5-star auto-redirect' }
       ]);
-      
-      // Then redirect
       window.location.href = googleLink || 'https://google.com';
     }
   };
 
   const handleSubmitFeedback = async () => {
     if (!supabase) return;
-
     const { error } = await supabase.from('feedback').insert([
-      {
-        business_username: businessId,
-        rating: rating,
-        message: feedback,
-      },
+      { business_username: businessId, rating: rating, message: feedback }
     ]);
-
-    if (!error) {
-      setSubmitted(true);
-    } else {
-      console.error(error);
-      alert("Error saving: " + error.message);
-    }
+    if (!error) setSubmitted(true);
   };
 
   if (submitted) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
-        <h1 className="text-2xl px-4 text-center">Thank you! Your feedback helps us improve.</h1>
+      <div className="h-screen flex items-center justify-center bg-gray-900 text-white p-6">
+        <h1 className="text-2xl text-center">Thank you! Your feedback helps us improve.</h1>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
-      {/* If Supabase is missing, show a warning to you (the developer) */}
-      {!supabase && (
-        <div className="bg-red-600 text-white p-2 mb-4 rounded text-xs">
-          Developer Error: NEXT_PUBLIC_SUPABASE_URL is missing.
+      {/* 3. DIAGNOSTIC BOX: If this shows up, your Vercel Settings are the problem */}
+      {!isConfigured && (
+        <div className="bg-red-900 border-2 border-red-500 p-6 rounded-xl max-w-sm text-center mb-8">
+          <h2 className="text-xl font-bold mb-2">Configuration Missing</h2>
+          <p className="text-sm opacity-90 mb-4">
+            The app cannot find <strong>NEXT_PUBLIC_SUPABASE_URL</strong>.
+          </p>
+          <div className="text-left bg-black p-3 rounded text-xs font-mono">
+            Value found: "{supabaseUrl || 'EMPTY'}"
+          </div>
         </div>
       )}
 
@@ -110,9 +94,8 @@ export default function ReviewFunnel({ params }: { params: Promise<{ id: string 
         {[1, 2, 3, 4, 5].map((star) => (
           <button
             key={star}
-            type="button"
             onClick={() => processReview(star)}
-            className="transform hover:scale-110 transition-transform active:scale-95"
+            className="transform hover:scale-110 active:scale-90 transition-all"
           >
             <Star
               size={48}
@@ -126,15 +109,15 @@ export default function ReviewFunnel({ params }: { params: Promise<{ id: string 
       {rating > 0 && rating < 5 && (
         <div className="w-full max-w-md">
           <textarea
-            className="w-full p-4 rounded bg-gray-800 text-white border border-gray-700"
+            className="w-full p-4 rounded bg-gray-900 border border-gray-700 text-white"
             rows={4}
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="How can we improve?"
+            placeholder="Tell us what we can improve..."
           />
           <button
             onClick={handleSubmitFeedback}
-            className="mt-4 w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200"
+            className="mt-4 w-full bg-white text-black font-bold py-3 rounded"
           >
             Submit Feedback
           </button>
