@@ -1,126 +1,93 @@
+'use client';
 
-import { supabase } from '@/lib/supabase'
-import { logScan } from '@/app/actions'
-import { notFound } from 'next/navigation'
-import Image from 'next/image'
-import { Twitter, Linkedin, Globe, Mail, Phone, Share2 } from 'lucide-react'
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { Star } from 'lucide-react'; // Make sure to install: npm install lucide-react
 
-// Force dynamic rendering to ensure analytics runs on every request
-export const dynamic = 'force-dynamic'
+export default function ReviewFunnel({ params }: { params: { id: string } }) {
+  const [rating, setRating] = useState(0);
+  const [feedback, setFeedback] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [businessName, setBusinessName] = useState('Loading...');
+  const [googleLink, setGoogleLink] = useState('');
 
-interface Props {
-    params: Promise<{ id: string }>
-}
+  useEffect(() => {
+    // 1. Fetch the business details when page loads
+    const fetchBusiness = async () => {
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        // We assume your 'profiles' table has columns: 'full_name' and 'website' (for the google link)
+        const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('username', params.id) // matching the URL id to the username
+            .single();
 
-export default async function UserProfile({ params }: Props) {
-    // Await params safely
-    const { id: username } = await params
+        if (data) {
+            setBusinessName(data.full_name || 'Our Business');
+            setGoogleLink(data.website || 'https://google.com'); // Fallback
+        }
+    };
+    fetchBusiness();
+  }, [params.id]);
 
-    // 1. Fetch User Data with fallback
-    const { data: user, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', username)
-        .single()
-
-    if (error || !user) {
-        // console.error('User not found or error:', error)
-        // Return simple fallback UI instead of notFound() to prevent build failure during static analysis
-        return (
-            <main className="min-h-screen bg-neutral-950 text-white flex items-center justify-center">
-                <div className="text-center">
-                    <h1 className="text-2xl font-bold">User Not Found</h1>
-                    <p className="text-neutral-500 mt-2">The profile you are looking for does not exist.</p>
-                </div>
-            </main>
-        )
+  const handleRate = (star: number) => {
+    setRating(star);
+    if (star === 5) {
+        // THE MAGIC: 5 Stars = Go to Google
+        window.location.href = googleLink;
     }
+  };
 
-    // 2. Log the scan (Analytics) - Fire and forget
-    // Safe to call here as user exists
-    await logScan(user.id) // Analytics enabled safely
+  const handleSubmit = async () => {
+     // Here you would save the bad feedback to Supabase
+     setSubmitted(true);
+  };
 
-    // Parse social links if stored as JSON string, or use as object if JSONB
-    const socialLinks = typeof user.social_links === 'string'
-        ? JSON.parse(user.social_links)
-        : user.social_links || {}
+  if (submitted) {
+      return <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
+          <h1 className="text-2xl">Thank you for your feedback! We will improve.</h1>
+      </div>;
+  }
 
-    return (
-        <main className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center p-4">
-            <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden shadow-2xl animate-fade-in-up">
+  return (
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
+      <h1 className="text-3xl font-bold mb-8 text-center">Rate {businessName}</h1>
+      
+      <div className="flex gap-2 mb-8">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button 
+            key={star}
+            onClick={() => handleRate(star)}
+            className="transform hover:scale-110 transition-transform"
+          >
+            <Star 
+                size={48} 
+                fill={star <= rating ? "#FFD700" : "none"} 
+                color={star <= rating ? "#FFD700" : "#4B5563"}
+            />
+          </button>
+        ))}
+      </div>
 
-                {/* Header / Banner area could go here */}
-                <div className="h-32 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-700 via-neutral-900 to-neutral-950"></div>
-
-                <div className="px-6 pb-8 -mt-16 flex flex-col items-center text-center">
-                    {/* Profile Image */}
-                    <div className="relative w-32 h-32 rounded-full border-4 border-neutral-900 shadow-xl overflow-hidden bg-neutral-800">
-                        {user.avatar_url ? (
-                            <Image
-                                src={user.avatar_url}
-                                alt={user.full_name}
-                                fill
-                                className="object-cover"
-                            />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-4xl font-bold text-neutral-500">
-                                {user.full_name?.charAt(0) || '?'}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Name & Title */}
-                    <h1 className="mt-4 text-2xl font-bold tracking-tight text-white">{user.full_name}</h1>
-                    <p className="text-neutral-400 font-medium text-sm mt-1 uppercase tracking-wider">{user.job_title}</p>
-
-                    {/* Bio */}
-                    {user.bio && (
-                        <p className="mt-4 text-neutral-300 text-sm leading-relaxed max-w-xs mx-auto">
-                            {user.bio}
-                        </p>
-                    )}
-
-                    {/* Action Buttons */}
-                    <div className="w-full mt-8 space-y-3">
-                        {/* Contact Actions */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <button className="flex items-center justify-center gap-2 bg-white text-neutral-950 py-3 rounded-xl font-semibold text-sm hover:bg-neutral-200 transition-colors">
-                                <Mail className="w-4 h-4" /> Email
-                            </button>
-                            <button className="flex items-center justify-center gap-2 bg-white text-neutral-950 py-3 rounded-xl font-semibold text-sm hover:bg-neutral-200 transition-colors">
-                                <Phone className="w-4 h-4" /> Call
-                            </button>
-                        </div>
-
-                        <button className="w-full flex items-center justify-center gap-2 bg-neutral-800 text-white py-3 rounded-xl font-medium text-sm hover:bg-neutral-700 transition-colors border border-neutral-700">
-                            <Share2 className="w-4 h-4" /> Save Contact
-                        </button>
-                    </div>
-
-                    {/* Social Links */}
-                    <div className="mt-8 flex items-center justify-center gap-6">
-                        {socialLinks.twitter && (
-                            <a href={socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-neutral-400 hover:text-white transition-colors">
-                                <Twitter className="w-6 h-6" />
-                            </a>
-                        )}
-                        {socialLinks.linkedin && (
-                            <a href={socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-neutral-400 hover:text-white transition-colors">
-                                <Linkedin className="w-6 h-6" />
-                            </a>
-                        )}
-                        {socialLinks.website && (
-                            <a href={socialLinks.website} target="_blank" rel="noopener noreferrer" className="text-neutral-400 hover:text-white transition-colors">
-                                <Globe className="w-6 h-6" />
-                            </a>
-                        )}
-                    </div>
-
-                    <div className="mt-12 text-neutral-600 text-xs">
-                        Scan to Connect
-                    </div>
-                </div>
-            </div>
-        </main>
-    )
+      {rating > 0 && rating < 5 && (
+          <div className="w-full max-w-md animate-fade-in">
+              <p className="mb-4 text-center text-gray-400">What can we do better?</p>
+              <textarea 
+                  className="w-full p-4 rounded bg-gray-800 text-white border border-gray-700"
+                  rows={4}
+                  onChange={(e) => setFeedback(e.target.value)}
+              />
+              <button 
+                  onClick={handleSubmit}
+                  className="mt-4 w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200"
+              >
+                  Send Private Feedback
+              </button>
+          </div>
+      )}
+    </div>
+  );
 }
