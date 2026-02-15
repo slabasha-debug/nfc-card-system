@@ -41,9 +41,27 @@ export default function ReviewFunnel({ params }: { params: { id: string } }) {
     }
   };
 
-  const handleSubmit = async () => {
-     // Here you would save the bad feedback to Supabase
-     setSubmitted(true);
+const handleSubmit = async () => {
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { error } = await supabase
+        .from('feedback')
+        .insert([
+            { 
+                business_username: params.id, 
+                rating: rating, 
+                message: feedback 
+            }
+        ]);
+
+    if (!error) {
+        setSubmitted(true);
+    } else {
+        alert("Error saving feedback. Please try again.");
+    }
   };
 
   if (submitted) {
