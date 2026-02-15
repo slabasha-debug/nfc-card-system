@@ -15,8 +15,8 @@ export default function ReviewFunnel({ params }: { params: { id: string } }) {
     // 1. Fetch the business details when page loads
     const fetchBusiness = async () => {
         const supabase = createClient(
-            'https://vkafppgxbijsanbchemm.supabase.co',
-            'sb_secret_ZNeozMFbS8CCNEisUrfHqA_aMsXDvHm'
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         );
         // We assume your 'profiles' table has columns: 'full_name' and 'website' (for the google link)
         const { data } = await supabase
@@ -43,8 +43,8 @@ export default function ReviewFunnel({ params }: { params: { id: string } }) {
 
 const handleSubmit = async () => {
     const supabase = createClient(
-        'https://vkafppgxbijsanbchemm.supabase.co',
-        'sb_secret_ZNeozMFbS8CCNEisUrfHqA_aMsXDvHm'
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
     const { error } = await supabase
