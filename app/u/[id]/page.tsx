@@ -37,7 +37,7 @@ export default function ReviewFunnel({ params }: { params: { id: string } }) {
     setRating(star);
     if (star === 5) {
         // THE MAGIC: 5 Stars = Go to Google
-        window.location.href = googleLink;
+        window.location.href = 'https://share.google/nanUjX8N28JnoKvVo';
     }
   };
 
